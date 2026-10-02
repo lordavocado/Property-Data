@@ -39,6 +39,7 @@ export interface PropertyRow {
   latitude: number | null;
   longitude: number | null;
   neighborhoods: string | null;
+  data_quality_score: number | null;
   fips_code: string | null;
   property_url: string | null;
   primary_photo: string | null;

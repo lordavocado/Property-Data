@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
 import type { PropertyRow } from "./types";
 
@@ -75,8 +75,11 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [sort, setSort] = useState<SortState>({ key: "list_price", dir: "desc" });
   const [detail, setDetail] = useState<PropertyRow | null>(null);
+  const [areas, setAreas] = useState<{ label: string; norm: string; count: number }[]>([]);
+  const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,10 +100,13 @@ export default function App() {
           );
         }
         if (areaFilter !== "all") {
-          query = query.eq("search_area", areaFilter);
+          query = query.eq("search_area_norm", areaFilter.toLowerCase());
         }
         if (statusFilter !== "all") {
-          query = query.eq("status", statusFilter);
+          query = query.eq("listing_status", statusFilter);
+        }
+        if (typeFilter !== "all") {
+          query = query.eq("property_type", typeFilter);
         }
 
         query = query.order(sort.key, { ascending: sort.dir === "asc" });
@@ -122,12 +128,40 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, areaFilter, statusFilter, sort]);
+  }, [page, search, areaFilter, statusFilter, typeFilter, sort]);
 
-  const cityOptions = useMemo(
-    () => ["all", "San Diego, CA", "Austin, TX", "Miami, FL"],
-    []
-  );
+  // Load facet options from taxonomy tables (scales to any number of areas)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [areasRes, typesRes] = await Promise.all([
+          supabase
+            .from("dim_areas")
+            .select("search_area_norm, display_label, listing_count")
+            .order("listing_count", { ascending: false })
+            .limit(200),
+          supabase.from("dim_property_types").select("value, label").order("sort_order"),
+        ]);
+        if (cancelled) return;
+        if (areasRes.data) {
+          setAreas(
+            areasRes.data.map((a) => ({
+              label: a.display_label,
+              norm: a.search_area_norm,
+              count: a.listing_count,
+            }))
+          );
+        }
+        if (typesRes.data) setTypes(typesRes.data);
+      } catch {
+        // facet load failure is non-fatal; filters fall back to "all"
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const startNum = total === 0 ? 0 : page * PAGE_SIZE + 1;
@@ -181,15 +215,16 @@ export default function App() {
         </div>
         <select
           className="select"
-          value={areaFilter}
+          value={areaFilter.toLowerCase()}
           onChange={(e) => {
             setAreaFilter(e.target.value);
             setPage(0);
           }}
         >
-          {cityOptions.map((c) => (
-            <option key={c} value={c}>
-              {c === "all" ? "All areas" : c}
+          <option value="all">All areas</option>
+          {areas.map((a) => (
+            <option key={a.norm} value={a.norm}>
+              {a.label} ({a.count})
             </option>
           ))}
         </select>
@@ -205,6 +240,22 @@ export default function App() {
           <option value="FOR_SALE">For Sale</option>
           <option value="PENDING">Pending</option>
           <option value="CONTINGENT">Contingent</option>
+          <option value="SOLD">Sold</option>
+        </select>
+        <select
+          className="select"
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="all">All types</option>
+          {types.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -364,8 +415,7 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
   const badge = statusBadge(row.status);
   const items: { label: string; value: string }[] = [
     { label: "Status", value: badge.label },
-    { label: "Property type", value: (row.style ?? "").replace(/_/g, " ").toLowerCase() || "—" },
-    { label: "Beds", value: row.beds != null ? String(row.beds) : "—" },
+    { label: "Property type", value: (row.style ?? "").replace(/_/g, " ").toLowerCase() || "—" },    { label: "Beds", value: row.beds != null ? String(row.beds) : "—" },
     {
       label: "Baths",
       value:
@@ -385,6 +435,7 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
     { label: "Last updated", value: formatDate(row.last_update_date) },
     { label: "Source", value: row.source ?? (row.mls ? `MLS ${row.mls}` : "Realtor.com") },
     { label: "Search area", value: row.search_area ?? "—" },
+    { label: "Data quality", value: `${row.data_quality_score ?? "—"} / 100` },
   ];
 
   return (

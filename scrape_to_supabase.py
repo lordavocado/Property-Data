@@ -25,7 +25,20 @@ def get_supabase_client() -> Client:
     return create_client(url, key)
 
 
-def dataframe_to_records(df, search_area: str) -> list[dict]:
+STATUS_MAP = {
+    "FOR_SALE": "FOR_SALE", "PENDING": "PENDING", "CONTINGENT": "CONTINGENT",
+    "SOLD": "SOLD", "OFF_MARKET": "OFF_MARKET", "OTHER": "UNKNOWN",
+}
+
+STYLE_MAP = {
+    "SINGLE_FAMILY": "SINGLE_FAMILY", "CONDO": "CONDO", "CONDOS": "CONDO",
+    "CONDO_TOWNHOME_ROWHOME_COOP": "CONDO", "TOWNHOME": "TOWNHOME",
+    "TOWNHOMES": "TOWNHOME", "MULTI_FAMILY": "MULTI_FAMILY", "MOBILE": "MOBILE",
+    "LAND": "LAND", "APARTMENT": "APARTMENT",
+}
+
+
+def dataframe_to_records(df, search_area: str, batch_id: str | None = None) -> list[dict]:
     """Convert a pandas DataFrame to a list of dicts matching the properties table schema."""
     records = []
     now = datetime.now(timezone.utc).isoformat()
@@ -55,8 +68,10 @@ def dataframe_to_records(df, search_area: str) -> list[dict]:
             "source": "Realtor.com",
             "mls_id": val("mls_id"),
             "status": val("status"),
+            "listing_status": STATUS_MAP.get((val("status") or "OTHER").upper(), "UNKNOWN"),
             "mls_status": val("mls_status"),
             "style": val("style"),
+            "property_type": STYLE_MAP.get((val("style") or "OTHER").upper(), "OTHER"),
             "street": val("street"),
             "unit": val("unit"),
             "city": val("city"),
@@ -100,6 +115,7 @@ def dataframe_to_records(df, search_area: str) -> list[dict]:
             "office_name": val("office_name"),
             "description_text": val("text"),
             "search_area": search_area,
+            "batch_id": batch_id,
             "scraped_at": now,
         }
 
@@ -122,6 +138,18 @@ def main():
     print("=" * 60)
 
     all_records = []
+    sb = get_supabase_client()
+
+    batch_resp = sb.table("scrape_batches").insert({
+        "source": "Realtor.com",
+        "listing_type": ",".join(listing_types),
+        "locations": locations,
+        "status": "running",
+    }).execute()
+    batch_id = batch_resp.data[0]["id"]
+    print(f"Scrape batch: {batch_id}")
+
+    scrape_errors = []
     for location in locations:
         for lt in listing_types:
             print(f"\nScraping: {location} | listing_type={lt} | past_days=30")
@@ -134,6 +162,7 @@ def main():
                 )
             except Exception as e:
                 print(f"  ERROR scraping {location}/{lt}: {e}")
+                scrape_errors.append(f"{location}/{lt}: {e}")
                 continue
 
             if df.empty:
@@ -141,13 +170,11 @@ def main():
                 continue
 
             print(f"  Scraped {len(df)} properties")
-            records = dataframe_to_records(df, search_area=location)
+            records = dataframe_to_records(df, search_area=location, batch_id=batch_id)
             all_records.extend(records)
 
     print(f"\nTotal scraped: {len(all_records)} properties")
 
-    # Upload directly to Supabase in batches, upserting on property_id
-    sb = get_supabase_client()
     batch_size = 50
     inserted = 0
     for i in range(0, len(all_records), batch_size):
@@ -160,6 +187,17 @@ def main():
             print(f"  Uploaded batch {i // batch_size + 1}: {len(batch)} rows")
         except Exception as e:
             print(f"  ERROR uploading batch {i // batch_size + 1}: {e}")
+            scrape_errors.append(f"upload {i // batch_size + 1}: {e}")
+
+    sb.table("scrape_batches").update({
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "row_count": inserted,
+        "status": "completed" if not scrape_errors else "failed",
+        "error": "\n".join(scrape_errors) if scrape_errors else None,
+    }).eq("id", batch_id).execute()
+
+    # Refresh area counts
+    sb.rpc("refresh_area_counts").execute()
 
     print(f"\n{'=' * 60}")
     print(f"Done! Uploaded {inserted}/{len(all_records)} properties to Supabase.")
