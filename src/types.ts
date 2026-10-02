@@ -4,6 +4,8 @@ export interface PropertyRow {
   listing_id: string | null;
   status: string | null;
   mls: string | null;
+  source: string | null;
+  search_area: string | null;
   mls_id: string | null;
   style: string | null;
   street: string | null;

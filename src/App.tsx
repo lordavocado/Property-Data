@@ -12,7 +12,8 @@ type SortKey =
   | "days_on_mls"
   | "year_built"
   | "city"
-  | "state";
+  | "state"
+  | "list_date";
 
 interface SortState {
   key: SortKey;
@@ -27,6 +28,7 @@ const COLUMNS: { key: SortKey; label: string; sortable: boolean }[] = [
   { key: "sqft", label: "Sq Ft", sortable: true },
   { key: "price_per_sqft", label: "$/SqFt", sortable: true },
   { key: "days_on_mls", label: "Days on MLS", sortable: true },
+  { key: "list_date", label: "Listed", sortable: true },
   { key: "year_built", label: "Built", sortable: true },
 ];
 
@@ -42,6 +44,17 @@ function formatPrice(n: number | null): string {
 function formatNum(n: number | null): string {
   if (n == null) return "—";
   return new Intl.NumberFormat("en-US").format(n);
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function statusBadge(status: string | null): { label: string; cls: string } {
@@ -60,7 +73,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [cityFilter, setCityFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sort, setSort] = useState<SortState>({ key: "list_price", dir: "desc" });
   const [detail, setDetail] = useState<PropertyRow | null>(null);
@@ -83,8 +96,8 @@ export default function App() {
             `street.ilike.${term},city.ilike.${term},zip_code.ilike.${term}`
           );
         }
-        if (cityFilter !== "all") {
-          query = query.eq("city", cityFilter);
+        if (areaFilter !== "all") {
+          query = query.eq("search_area", areaFilter);
         }
         if (statusFilter !== "all") {
           query = query.eq("status", statusFilter);
@@ -109,10 +122,10 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, cityFilter, statusFilter, sort]);
+  }, [page, search, areaFilter, statusFilter, sort]);
 
   const cityOptions = useMemo(
-    () => ["all", "San Diego", "Austin", "Miami"],
+    () => ["all", "San Diego, CA", "Austin, TX", "Miami, FL"],
     []
   );
 
@@ -168,15 +181,15 @@ export default function App() {
         </div>
         <select
           className="select"
-          value={cityFilter}
+          value={areaFilter}
           onChange={(e) => {
-            setCityFilter(e.target.value);
+            setAreaFilter(e.target.value);
             setPage(0);
           }}
         >
           {cityOptions.map((c) => (
             <option key={c} value={c}>
-              {c === "all" ? "All cities" : c}
+              {c === "all" ? "All areas" : c}
             </option>
           ))}
         </select>
@@ -214,6 +227,7 @@ export default function App() {
                   </th>
                 ))}
                 <th>Status</th>
+                <th>Source</th>
               </tr>
             </thead>
             <tbody>
@@ -273,7 +287,13 @@ export default function App() {
                         if (col.key === "price_per_sqft")
                           return (
                             <td key={col.key} className="cell-num">
-                              {r.price_per_sqft != null ? `$${formatNum(r.price_per_sqft)}` : "—"}
+                              {r.price_per_sqft != null ? `${formatNum(r.price_per_sqft)}` : "—"}
+                            </td>
+                          );
+                        if (col.key === "list_date")
+                          return (
+                            <td key={col.key} className="cell-num">
+                              {formatDate(r.list_date)}
                             </td>
                           );
                         return (
@@ -284,6 +304,11 @@ export default function App() {
                       })}
                       <td>
                         <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                      </td>
+                      <td>
+                        <span className="cell-dim" title={r.mls ? `MLS: ${r.mls}` : undefined}>
+                          {r.source ?? "Realtor.com"}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -342,6 +367,10 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
     { label: "Estimated value", value: formatPrice(row.estimated_value) },
     { label: "Last sold", value: row.last_sold_price != null ? formatPrice(row.last_sold_price) : "—" },
     { label: "Days on MLS", value: row.days_on_mls != null ? String(row.days_on_mls) : "—" },
+    { label: "Listed on", value: formatDate(row.list_date) },
+    { label: "Last updated", value: formatDate(row.last_update_date) },
+    { label: "Source", value: row.source ?? (row.mls ? `MLS ${row.mls}` : "Realtor.com") },
+    { label: "Search area", value: row.search_area ?? "—" },
   ];
 
   return (

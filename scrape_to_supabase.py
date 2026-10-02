@@ -25,7 +25,7 @@ def get_supabase_client() -> Client:
     return create_client(url, key)
 
 
-def dataframe_to_records(df) -> list[dict]:
+def dataframe_to_records(df, search_area: str) -> list[dict]:
     """Convert a pandas DataFrame to a list of dicts matching the properties table schema."""
     records = []
     now = datetime.now(timezone.utc).isoformat()
@@ -52,6 +52,7 @@ def dataframe_to_records(df) -> list[dict]:
             "listing_id": val("listing_id"),
             "permalink": val("permalink"),
             "mls": val("mls"),
+            "source": "Realtor.com",
             "mls_id": val("mls_id"),
             "status": val("status"),
             "mls_status": val("mls_status"),
@@ -98,45 +99,13 @@ def dataframe_to_records(df) -> list[dict]:
             "broker_name": val("broker_name"),
             "office_name": val("office_name"),
             "description_text": val("text"),
+            "search_area": search_area,
             "scraped_at": now,
         }
 
         records.append(record)
 
     return records
-
-
-def records_to_sql(records: list[dict]) -> str:
-    """Convert records to a single SQL string with batch INSERT ... ON CONFLICT upsert."""
-    if not records:
-        return ""
-
-    # Use a fixed column order from the first record
-    cols = list(records[0].keys())
-    col_str = ", ".join(cols)
-    update_str = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c != "property_id")
-
-    value_rows = []
-    for record in records:
-        vals = []
-        for col in cols:
-            val = record.get(col)
-            if val is None:
-                vals.append("NULL")
-            elif isinstance(val, bool):
-                vals.append("TRUE" if val else "FALSE")
-            elif isinstance(val, (int, float)):
-                vals.append(str(val))
-            else:
-                escaped = str(val).replace("'", "''")
-                vals.append(f"'{escaped}'")
-        value_rows.append(f"({', '.join(vals)})")
-
-    return (
-        f"INSERT INTO properties ({col_str}) VALUES "
-        + ", ".join(value_rows)
-        + f" ON CONFLICT (property_id) DO UPDATE SET {update_str};"
-    )
 
 
 def main():
@@ -172,24 +141,28 @@ def main():
                 continue
 
             print(f"  Scraped {len(df)} properties")
-            records = dataframe_to_records(df)
+            records = dataframe_to_records(df, search_area=location)
             all_records.extend(records)
 
     print(f"\nTotal scraped: {len(all_records)} properties")
 
-    # Write SQL in batches of 5 to separate files for execute_sql
-    batch_size = 5
+    # Upload directly to Supabase in batches, upserting on property_id
+    sb = get_supabase_client()
+    batch_size = 50
+    inserted = 0
     for i in range(0, len(all_records), batch_size):
         batch = all_records[i : i + batch_size]
-        sql = records_to_sql(batch)
-        batch_num = i // batch_size + 1
-        sql_file = f"/tmp/cc-agent/71669975/project/batch_{batch_num}.sql"
-        with open(sql_file, "w") as f:
-            f.write(sql)
-        print(f"  Wrote batch {batch_num}: {len(batch)} rows -> {sql_file}")
+        try:
+            sb.table("properties").upsert(
+                batch, on_conflict="property_id"
+            ).execute()
+            inserted += len(batch)
+            print(f"  Uploaded batch {i // batch_size + 1}: {len(batch)} rows")
+        except Exception as e:
+            print(f"  ERROR uploading batch {i // batch_size + 1}: {e}")
 
     print(f"\n{'=' * 60}")
-    print(f"Done! {len(all_records)} properties across {math.ceil(len(all_records) / batch_size)} batch files.")
+    print(f"Done! Uploaded {inserted}/{len(all_records)} properties to Supabase.")
     print("=" * 60)
 
 
