@@ -14,15 +14,15 @@ type SortKey =
   | "city"
   | "state"
   | "list_date";
-
 interface SortState {
   key: SortKey;
   dir: "asc" | "desc";
 }
 
-const COLUMNS: { key: SortKey; label: string; sortable: boolean }[] = [
+const COLUMNS: { key: SortKey | "zip_code"; label: string; sortable: boolean }[] = [
   { key: "city", label: "City", sortable: true },
   { key: "state", label: "State", sortable: true },
+  { key: "zip_code", label: "ZIP", sortable: false },
   { key: "list_price", label: "Price", sortable: true },
   { key: "beds", label: "Beds", sortable: true },
   { key: "sqft", label: "Sq Ft", sortable: true },
@@ -217,8 +217,8 @@ export default function App() {
                 {COLUMNS.map((col) => (
                   <th
                     key={col.key}
-                    className={`sortable ${sort.key === col.key ? "sorted" : ""}`}
-                    onClick={() => toggleSort(col.key)}
+                    className={`${col.sortable ? "sortable" : ""} ${sort.key === col.key ? "sorted" : ""}`}
+                    onClick={col.sortable ? () => toggleSort(col.key as SortKey) : undefined}
                   >
                     {col.label}
                     <span className="sort-arrow">
@@ -272,10 +272,6 @@ export default function App() {
                           {r.street ?? r.formatted_address ?? "—"}
                           {r.unit ? ` ${r.unit}` : ""}
                         </div>
-                        <div className="cell-city cell-dim">
-                          {[r.city, r.state].filter(Boolean).join(", ")}
-                          {r.zip_code ? ` ${r.zip_code}` : ""}
-                        </div>
                       </td>
                       {COLUMNS.map((col) => {
                         if (col.key === "list_price")
@@ -294,6 +290,24 @@ export default function App() {
                           return (
                             <td key={col.key} className="cell-num">
                               {formatDate(r.list_date)}
+                            </td>
+                          );
+                        if (col.key === "city")
+                          return (
+                            <td key={col.key} className="cell-city">
+                              {r.city ?? "—"}
+                            </td>
+                          );
+                        if (col.key === "state")
+                          return (
+                            <td key={col.key} className="cell-num">
+                              {r.state ?? "—"}
+                            </td>
+                          );
+                        if (col.key === "zip_code")
+                          return (
+                            <td key={col.key} className="cell-dim">
+                              {r.zip_code ?? "—"}
                             </td>
                           );
                         return (
