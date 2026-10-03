@@ -1,5 +1,7 @@
-// Classifies untagged property listings with GPT-4o-mini.
-// POST { limit?: number } -> { tagged, batches, skipped }
+// Classifies untagged property listings with the Jev decision model (TypeSafe)
+// via OpenRouter's Decisions API. One request per listing; one yes/no question
+// per active tag. A tag is applied when its yes-probability clears THRESHOLD.
+// POST { limit?: number } -> { tagged, batches, skipped, cost }
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -34,12 +36,6 @@ interface PropertyRow {
   description_text: string | null;
 }
 
-interface Tagging {
-  property_id: string;
-  value: string;
-  confidence: number;
-}
-
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -58,12 +54,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
     if (!supabaseUrl || !serviceKey) {
       return json({ error: "Supabase configuration missing" }, 500);
     }
-    if (!openaiKey) {
-      return json({ error: "OPENAI_API_KEY not configured" }, 503);
+    if (!openrouterKey) {
+      return json({ error: "OPENROUTER_API_KEY not configured" }, 503);
     }
 
     let limit = 100;
@@ -110,79 +106,66 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const tagList = tagRows as TagRow[];
     const valueToId = new Map(tagList.map((t) => [t.value, t.id]));
-    const allowedValues = new Set(tagList.map((t) => t.value));
 
-    const BATCH_SIZE = 20;
+    const THRESHOLD = 0.7;
     let totalTagged = 0;
     let batchCount = 0;
     let skipped = 0;
+    let totalCost = 0;
 
-    for (let i = 0; i < untagged.length; i += BATCH_SIZE) {
-      const batch: PropertyRow[] = untagged.slice(i, i + BATCH_SIZE);
-      const payload = {
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a real-estate listing tagger. You will receive a list of listings, each with facts and a description. " +
-              "For each listing choose at most 6 tags from the provided tag list. Only apply a tag when the evidence is explicit. " +
-              'Respond with JSON only: {"results": [{"property_id": "...", "tags": [{"value": "...", "confidence": 0.0-1.0}]}]}. ' +
-              "Every property_id you were given must appear exactly once in results; use an empty tags array when nothing applies.",
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              tags: tagList.map((t) => ({ value: t.value, category: t.category, description: t.description })),
-              listings: batch.map((p) => ({
-                property_id: p.property_id,
-                facts: {
-                  type: p.style,
-                  beds: p.beds,
-                  baths: p.full_baths,
-                  sqft: p.sqft,
-                  lot_sqft: p.lot_sqft,
-                  year_built: p.year_built,
-                  list_price: p.list_price,
-                  original_list_price: p.original_list_price,
-                  price_per_sqft: p.price_per_sqft,
-                  hoa_fee: p.hoa_fee,
-                },
-                location: [p.street, p.city, p.state].filter(Boolean).join(", "),
-                description: (p.description_text ?? "").slice(0, 1200),
-              })),
-            }),
-          },
-        ],
+    for (const p of untagged as PropertyRow[]) {
+      const state = {
+        location: [p.street, p.city, p.state].filter(Boolean).join(", "),
+        facts: {
+          type: p.style,
+          beds: p.beds,
+          baths: p.full_baths,
+          sqft: p.sqft,
+          lot_sqft: p.lot_sqft,
+          year_built: p.year_built,
+          list_price: p.list_price,
+          original_list_price: p.original_list_price,
+          price_per_sqft: p.price_per_sqft,
+          hoa_fee: p.hoa_fee,
+        },
+        description: (p.description_text ?? "").slice(0, 1200),
       };
 
-      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      const questions: Record<string, unknown> = {};
+      for (const t of tagList) {
+        questions[t.value] = {
+          type: "noul",
+          instructions: `Does this listing match the tag "${t.label}"?`,
+          criteria: {
+            true: t.description,
+            false: `The listing gives no explicit evidence for "${t.label}".`,
+          },
+        };
+      }
+
+      const resp = await fetch("https://openrouter.ai/api/alpha/decisions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${openaiKey}`,
+          Authorization: `Bearer ${openrouterKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          model: "typesafe/jev-1.13",
+          state,
+          questions,
+        }),
       });
 
       if (!resp.ok) {
         const errText = await resp.text();
-        throw new Error(`OpenAI request failed (${resp.status}): ${errText.slice(0, 300)}`);
+        throw new Error(`OpenRouter request failed (${resp.status}): ${errText.slice(0, 300)}`);
       }
 
       const data = await resp.json();
-      const content = data?.choices?.[0]?.message?.content;
-      if (typeof content !== "string") {
-        skipped += batch.length;
-        continue;
-      }
-
-      let parsed: { results?: { property_id?: string; tags?: { value?: string; confidence?: number }[] }[] };
-      try {
-        parsed = JSON.parse(content);
-      } catch {
-        skipped += batch.length;
+      totalCost += typeof data?.usage?.cost === "number" ? data.usage.cost : 0;
+      const answers = data?.answers;
+      if (!answers || typeof answers !== "object") {
+        skipped += 1;
         continue;
       }
 
@@ -192,18 +175,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
         confidence: number;
         model: string;
       }[] = [];
-      const batchIds = new Set(batch.map((p) => p.property_id));
 
-      for (const r of parsed.results ?? []) {
-        if (!r || typeof r.property_id !== "string" || !batchIds.has(r.property_id)) continue;
-        for (const t of r.tags ?? []) {
-          if (typeof t.value !== "string" || !allowedValues.has(t.value)) continue;
-          const conf = typeof t.confidence === "number" && t.confidence >= 0 && t.confidence <= 1 ? t.confidence : 0.5;
+      for (const t of tagList) {
+        const a = answers[t.value];
+        const pYes = typeof a?.noul === "number" ? a.noul : 0;
+        if (pYes >= THRESHOLD) {
           rows.push({
-            property_id: r.property_id,
+            property_id: p.property_id,
             tag_id: valueToId.get(t.value)!,
-            confidence: conf,
-            model: "gpt-4o-mini",
+            confidence: pYes,
+            model: "typesafe/jev-1.13",
           });
         }
       }
@@ -213,14 +194,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .from("property_tags")
           .upsert(rows, { onConflict: "property_id,tag_id", ignoreDuplicates: true });
         if (insertErr) throw insertErr;
-        totalTagged += batch.length;
-      } else {
-        skipped += batch.length;
       }
+      totalTagged += 1;
       batchCount += 1;
     }
 
-    return json({ tagged: totalTagged, batches: batchCount, skipped });
+    return json({
+      tagged: totalTagged,
+      batches: batchCount,
+      skipped,
+      cost_usd: Math.round(totalCost * 10000) / 10000,
+    });
   } catch (err) {
     return json(
       { error: err instanceof Error ? err.message : "Classification failed" },
