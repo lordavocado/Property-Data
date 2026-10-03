@@ -1,0 +1,4 @@
+project_id = "homeharvest-dashboard"
+
+[functions.classify-listings]
+verify_jwt = false

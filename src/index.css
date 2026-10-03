@@ -294,6 +294,31 @@ tbody tr:last-child td {
   color: var(--text-soft);
 }
 
+/* ---------- AI tags ---------- */
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 220px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tag-chip-more {
+  background: var(--surface-hover);
+  color: var(--text-soft);
+}
+
 /* ---------- Loading / error / empty ---------- */
 .state {
   padding: 64px 24px;

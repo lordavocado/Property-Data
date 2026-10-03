@@ -80,6 +80,8 @@ export default function App() {
   const [detail, setDetail] = useState<PropertyRow | null>(null);
   const [areas, setAreas] = useState<{ label: string; norm: string; count: number }[]>([]);
   const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
+  const [tagFilter, setTagFilter] = useState("all");
+  const [tagOptions, setTagOptions] = useState<{ value: string; label: string; category: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +91,7 @@ export default function App() {
     (async () => {
       try {
         let query = supabase
-          .from("properties")
+          .from("properties_with_tags")
           .select("*", { count: "exact" })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
@@ -107,6 +109,9 @@ export default function App() {
         }
         if (typeFilter !== "all") {
           query = query.eq("property_type", typeFilter);
+        }
+        if (tagFilter !== "all") {
+          query = query.contains("tag_values", [tagFilter]);
         }
 
         query = query.order(sort.key, { ascending: sort.dir === "asc" });
@@ -128,20 +133,25 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, areaFilter, statusFilter, typeFilter, sort]);
+  }, [page, search, areaFilter, statusFilter, typeFilter, tagFilter, sort]);
 
   // Load facet options from taxonomy tables (scales to any number of areas)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [areasRes, typesRes] = await Promise.all([
+        const [areasRes, typesRes, tagsRes] = await Promise.all([
           supabase
             .from("dim_areas")
             .select("search_area_norm, display_label, listing_count")
             .order("listing_count", { ascending: false })
             .limit(200),
           supabase.from("dim_property_types").select("value, label").order("sort_order"),
+          supabase
+            .from("tags")
+            .select("value, label, category")
+            .eq("is_active", true)
+            .order("category, label"),
         ]);
         if (cancelled) return;
         if (areasRes.data) {
@@ -154,6 +164,7 @@ export default function App() {
           );
         }
         if (typesRes.data) setTypes(typesRes.data);
+        if (tagsRes.data) setTagOptions(tagsRes.data);
       } catch {
         // facet load failure is non-fatal; filters fall back to "all"
       }
@@ -257,6 +268,21 @@ export default function App() {
             </option>
           ))}
         </select>
+        <select
+          className="select"
+          value={tagFilter}
+          onChange={(e) => {
+            setTagFilter(e.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="all">All tags</option>
+          {tagOptions.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="table-card">
@@ -265,6 +291,7 @@ export default function App() {
             <thead>
               <tr>
                 <th>Address</th>
+                <th>Tags</th>
                 {COLUMNS.map((col) => (
                   <th
                     key={col.key}
@@ -284,7 +311,7 @@ export default function App() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + 2}>
+                  <td colSpan={COLUMNS.length + 4}>
                     <div className="state">
                       <div className="spinner" />
                       <h3>Loading listings…</h3>
@@ -293,7 +320,7 @@ export default function App() {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + 2}>
+                  <td colSpan={COLUMNS.length + 4}>
                     <div className="state">
                       <h3>Something went wrong</h3>
                       <p>{error}</p>
@@ -302,7 +329,7 @@ export default function App() {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + 2}>
+                  <td colSpan={COLUMNS.length + 4}>
                     <div className="state">
                       <h3>No listings found</h3>
                       <p>Try adjusting your search or filters.</p>
@@ -322,6 +349,17 @@ export default function App() {
                         <div className="cell-address">
                           {r.street ?? r.formatted_address ?? "—"}
                           {r.unit ? ` ${r.unit}` : ""}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="tag-chips">
+                          {(r.tag_labels ?? []).slice(0, 3).map((tl) => (
+                            <span key={tl} className="tag-chip">{tl}</span>
+                          ))}
+                          {(r.tag_labels ?? []).length > 3 && (
+                            <span className="tag-chip tag-chip-more">+{(r.tag_labels ?? []).length - 3}</span>
+                          )}
+                          {(r.tag_labels ?? []).length === 0 && <span className="cell-dim">—</span>}
                         </div>
                       </td>
                       {COLUMNS.map((col) => {
@@ -464,6 +502,14 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
             </span>
             <span className={`badge ${badge.cls}`}>{badge.label}</span>
           </div>
+
+          {(row.tag_labels ?? []).length > 0 && (
+            <div className="tag-chips" style={{ marginBottom: 16 }}>
+              {(row.tag_labels ?? []).map((tl) => (
+                <span key={tl} className="tag-chip">{tl}</span>
+              ))}
+            </div>
+          )}
 
           <div className="detail-grid">
             {items.map((it) => (

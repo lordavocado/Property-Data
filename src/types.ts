@@ -48,6 +48,14 @@ export interface PropertyRow {
   broker_name: string | null;
   office_name: string | null;
   description_text: string | null;
+  tag_values?: string[] | null;
+  tag_labels?: string[] | null;
   scraped_at: string | null;
   created_at: string;
+}
+
+export interface TagInfo {
+  value: string;
+  label: string;
+  category: string;
 }
