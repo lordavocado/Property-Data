@@ -30,7 +30,7 @@ interface PropertyRow {
   lot_sqft: number | null;
   year_built: number | null;
   list_price: number | null;
-  original_list_price: number | null;
+  days_on_mls: number | null;
   price_per_sqft: number | null;
   hoa_fee: number | null;
   description_text: string | null;
@@ -63,11 +63,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     let limit = 100;
+    let debug = false;
     try {
       const body = await req.json();
       if (body && typeof body.limit === "number" && body.limit > 0 && body.limit <= 500) {
         limit = Math.floor(body.limit);
       }
+      if (body && body.debug === true) debug = true;
     } catch {
       // empty body is fine; use default limit
     }
@@ -90,7 +92,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const { data: allProps, error: propErr } = await admin
       .from("properties")
       .select(
-        "property_id, street, city, state, style, beds, full_baths, sqft, lot_sqft, year_built, list_price, original_list_price, price_per_sqft, hoa_fee, description_text"
+        "property_id, street, city, state, style, beds, full_baths, sqft, lot_sqft, year_built, list_price, days_on_mls, price_per_sqft, hoa_fee, description_text"
       )
       .order("scraped_at", { ascending: true })
       .limit(limit + taggedSet.size);
@@ -112,6 +114,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     let batchCount = 0;
     let skipped = 0;
     let totalCost = 0;
+    let debugSample: unknown = null;
 
     for (const p of untagged as PropertyRow[]) {
       const state = {
@@ -124,7 +127,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           lot_sqft: p.lot_sqft,
           year_built: p.year_built,
           list_price: p.list_price,
-          original_list_price: p.original_list_price,
+          days_on_mls: p.days_on_mls,
           price_per_sqft: p.price_per_sqft,
           hoa_fee: p.hoa_fee,
         },
@@ -162,6 +165,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
 
       const data = await resp.json();
+      if (debug && debugSample === null) debugSample = data;
       totalCost += typeof data?.usage?.cost === "number" ? data.usage.cost : 0;
       const answers = data?.answers;
       if (!answers || typeof answers !== "object") {
@@ -204,11 +208,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       batches: batchCount,
       skipped,
       cost_usd: Math.round(totalCost * 10000) / 10000,
+      ...(debug ? { debugSample } : {}),
     });
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Classification failed" },
-      500
-    );
+    const msg =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Classification failed";
+    return json({ error: msg }, 500);
   }
 });
