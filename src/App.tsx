@@ -82,6 +82,30 @@ export default function App() {
   const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
   const [tagFilter, setTagFilter] = useState("all");
   const [tagOptions, setTagOptions] = useState<{ value: string; label: string; category: string }[]>([]);
+  const [refreshFlag, setFlag] = useState(0);
+  const [tagging, setTagging] = useState(false);
+  const [tagResult, setTagResult] = useState<string | null>(null);
+
+  const runTagging = async () => {
+    setTagging(true);
+    setTagResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("classify-listings", {
+        body: { limit: 200 },
+      });
+      if (error) throw error;
+      const r = data as { tagged?: number; skipped?: number; cost_usd?: number };
+      setTagResult(
+        `Tagged ${r.tagged ?? 0} new listing${(r.tagged ?? 0) === 1 ? "" : "s"} — refresh to see them.`
+      );
+      // Reload data so new tags show up immediately
+      setFlag((f) => f + 1);
+    } catch (e) {
+      setTagResult(e instanceof Error ? `Tagging failed: ${e.message}` : "Tagging failed.");
+    } finally {
+      setTagging(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +157,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, areaFilter, statusFilter, typeFilter, tagFilter, sort]);
+  }, [page, search, areaFilter, statusFilter, typeFilter, tagFilter, sort, refreshFlag]);
 
   // Load facet options from taxonomy tables (scales to any number of areas)
   useEffect(() => {
@@ -193,6 +217,18 @@ export default function App() {
         <div>
           <h1>Property Listings</h1>
           <div className="sub">Live real-estate data scraped from Realtor.com</div>
+        </div>
+        <div className="header-actions">
+          {tagResult && <span className="tag-result-note">{tagResult}</span>}
+          <button className="tag-btn" onClick={runTagging} disabled={tagging}>
+            {tagging ? (
+              <>
+                <span className="spinner spinner-sm" /> Tagging…
+              </>
+            ) : (
+              "Tag new listings"
+            )}
+          </button>
         </div>
         <div className="count-badge">
           <strong>{total}</strong> listings
@@ -346,9 +382,19 @@ export default function App() {
                       style={{ cursor: "pointer" }}
                     >
                       <td>
-                        <div className="cell-address">
-                          {r.street ?? r.formatted_address ?? "—"}
-                          {r.unit ? ` ${r.unit}` : ""}
+                        <div className="cell-with-photo">
+                          {r.primary_photo && (
+                            <img
+                              className="row-thumb"
+                              src={r.primary_photo}
+                              alt=""
+                              loading="lazy"
+                            />
+                          )}
+                          <div className="cell-address">
+                            {r.street ?? r.formatted_address ?? "—"}
+                            {r.unit ? ` ${r.unit}` : ""}
+                          </div>
                         </div>
                       </td>
                       <td>
@@ -496,6 +542,13 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
           </button>
         </div>
         <div className="drawer-body">
+          {row.primary_photo && (
+            <img
+              className="drawer-photo"
+              src={row.primary_photo}
+              alt={row.street ?? "Property photo"}
+            />
+          )}
           <div style={{ marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
             <span className="cell-price" style={{ fontSize: 22 }}>
               {formatPrice(row.list_price)}
