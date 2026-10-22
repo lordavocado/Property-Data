@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/lib/supabaseClient.ts"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/lib/api.ts","./server/db.ts","./server/index.ts","./server/ingest.ts","./server/listings.ts","./server/models.ts","./server/seed-from-supabase.ts","./server/tagger.ts","./shared/types.ts"],"version":"5.9.3"}

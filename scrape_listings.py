@@ -1,28 +1,33 @@
 """
-Scrape property listings from Realtor.com using HomeHarvest and store them in Supabase.
+Scrape property listings from Realtor.com using HomeHarvest and store them
+via the project's ingest API (backed by MongoDB).
 
 This script:
 1. Scrapes property listings for specified locations and listing types
-2. Uploads the results to a Supabase `properties` table
+2. Sends the results to the server's /api/ingest/properties endpoint
 3. Upserts on property_id so re-running won't create duplicates
+
+Usage: python3 scrape_to_supabase.py
 """
 
 import os
 import sys
 import math
-import pandas as pd
+import time
+import requests
 from datetime import datetime, timezone
 
-from supabase import create_client, Client
 from homeharvest import scrape_property
 
+API_URL = os.environ.get("API_URL", "http://localhost:3001/api")
+INGEST_SECRET = os.environ.get("INGEST_SECRET")
 
-def get_supabase_client() -> Client:
-    url = os.environ.get("SUPABASE_URL") or os.environ.get("VITE_SUPABASE_URL")
-    key = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("VITE_SUPABASE_ANON_KEY")
-    if not url or not key:
-        raise RuntimeError("Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables.")
-    return create_client(url, key)
+
+def headers():
+    h = {"Content-Type": "application/json"}
+    if INGEST_SECRET:
+        h["x-ingest-secret"] = INGEST_SECRET
+    return h
 
 
 STATUS_MAP = {
@@ -39,7 +44,7 @@ STYLE_MAP = {
 
 
 def dataframe_to_records(df, search_area: str, batch_id: str | None = None) -> list[dict]:
-    """Convert a pandas DataFrame to a list of dicts matching the properties table schema."""
+    """Convert a pandas DataFrame to a list of dicts for the ingest API."""
     records = []
     now = datetime.now(timezone.utc).isoformat()
 
@@ -99,7 +104,7 @@ def dataframe_to_records(df, search_area: str, batch_id: str | None = None) -> l
             "price_per_sqft": val("price_per_sqft"),
             "assessed_value": val("assessed_value"),
             "estimated_value": val("estimated_value"),
-            "new_construction": val("new_construction"),
+            "new_construction": bool(val("new_construction")) if val("new_construction") is not None else False,
             "hoa_fee": val("hoa_fee"),
             "stories": val("stories"),
             "parking_garage": val("parking_garage"),
@@ -124,6 +129,9 @@ def dataframe_to_records(df, search_area: str, batch_id: str | None = None) -> l
     return records
 
 
+import pandas as pd  # noqa: E402  (used in val() above)
+
+
 def main():
     locations = [
         "San Diego, CA",
@@ -134,22 +142,29 @@ def main():
     listing_types = ["for_sale"]
 
     print("=" * 60)
-    print("HomeHarvest -> Supabase Property Scraper")
+    print("HomeHarvest -> API Property Scraper (MongoDB backend)")
     print("=" * 60)
 
-    all_records = []
-    sb = get_supabase_client()
+    # Health check
+    health = requests.get(f"{API_URL}/health", headers=headers(), timeout=10)
+    health.raise_for_status()
 
-    batch_resp = sb.table("scrape_batches").insert({
-        "source": "Realtor.com",
-        "listing_type": ",".join(listing_types),
-        "locations": locations,
-        "status": "running",
-    }).execute()
-    batch_id = batch_resp.data[0]["id"]
+    batch_resp = requests.post(
+        f"{API_URL}/ingest/scrape-batch",
+        headers=headers(),
+        json={
+            "source": "Realtor.com",
+            "listingType": ",".join(listing_types),
+            "locations": locations,
+        },
+        timeout=30,
+    )
+    batch_resp.raise_for_status()
+    batch_id = batch_resp.json()["batchId"]
     print(f"Scrape batch: {batch_id}")
 
     scrape_errors = []
+    total_records = 0
     for location in locations:
         for lt in listing_types:
             print(f"\nScraping: {location} | listing_type={lt} | past_days=30")
@@ -171,36 +186,40 @@ def main():
 
             print(f"  Scraped {len(df)} properties")
             records = dataframe_to_records(df, search_area=location, batch_id=batch_id)
-            all_records.extend(records)
+            total_records += len(records)
 
-    print(f"\nTotal scraped: {len(all_records)} properties")
+            # Upload in batches of 50
+            batch_size = 50
+            for i in range(0, len(records), batch_size):
+                chunk = records[i : i + batch_size]
+                try:
+                    resp = requests.post(
+                        f"{API_URL}/ingest/properties",
+                        headers=headers(),
+                        json={"records": chunk},
+                        timeout=60,
+                    )
+                    resp.raise_for_status()
+                    print(f"  Uploaded batch {i // batch_size + 1}: {len(chunk)} rows")
+                except Exception as e:
+                    print(f"  ERROR uploading batch {i // batch_size + 1}: {e}")
+                    scrape_errors.append(f"upload {i // batch_size + 1}: {e}")
+                time.sleep(0.2)
 
-    batch_size = 50
-    inserted = 0
-    for i in range(0, len(all_records), batch_size):
-        batch = all_records[i : i + batch_size]
-        try:
-            sb.table("properties").upsert(
-                batch, on_conflict="property_id"
-            ).execute()
-            inserted += len(batch)
-            print(f"  Uploaded batch {i // batch_size + 1}: {len(batch)} rows")
-        except Exception as e:
-            print(f"  ERROR uploading batch {i // batch_size + 1}: {e}")
-            scrape_errors.append(f"upload {i // batch_size + 1}: {e}")
-
-    sb.table("scrape_batches").update({
-        "finished_at": datetime.now(timezone.utc).isoformat(),
-        "row_count": inserted,
-        "status": "completed" if not scrape_errors else "failed",
-        "error": "\n".join(scrape_errors) if scrape_errors else None,
-    }).eq("id", batch_id).execute()
-
-    # Refresh area counts
-    sb.rpc("refresh_area_counts").execute()
+    finish = requests.post(
+        f"{API_URL}/ingest/scrape-batch/{batch_id}/finish",
+        headers=headers(),
+        json={
+            "rowCount": total_records,
+            "status": "completed" if not scrape_errors else "failed",
+            "error": "\n".join(scrape_errors) if scrape_errors else None,
+        },
+        timeout=30,
+    )
+    finish.raise_for_status()
 
     print(f"\n{'=' * 60}")
-    print(f"Done! Uploaded {inserted}/{len(all_records)} properties to Supabase.")
+    print(f"Done! Sent {total_records} properties to the API.")
     print("=" * 60)
 
 

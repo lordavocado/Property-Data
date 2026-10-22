@@ -1,35 +1,35 @@
 import { useEffect, useState } from "react";
-import { supabase } from "./lib/supabaseClient";
+import { api } from "./lib/api";
 import type { PropertyRow } from "./types";
 
 const PAGE_SIZE = 25;
 
 type SortKey =
-  | "list_price"
+  | "listPrice"
   | "beds"
   | "sqft"
-  | "price_per_sqft"
-  | "days_on_mls"
-  | "year_built"
+  | "pricePerSqft"
+  | "daysOnMls"
+  | "yearBuilt"
   | "city"
   | "state"
-  | "list_date";
+  | "listDate";
 interface SortState {
   key: SortKey;
   dir: "asc" | "desc";
 }
 
-const COLUMNS: { key: SortKey | "zip_code"; label: string; sortable: boolean }[] = [
+const COLUMNS: { key: SortKey | "zipCode"; label: string; sortable: boolean }[] = [
   { key: "city", label: "City", sortable: true },
   { key: "state", label: "State", sortable: true },
-  { key: "zip_code", label: "ZIP", sortable: false },
-  { key: "list_price", label: "Price", sortable: true },
+  { key: "zipCode", label: "ZIP", sortable: false },
+  { key: "listPrice", label: "Price", sortable: true },
   { key: "beds", label: "Beds", sortable: true },
   { key: "sqft", label: "Sq Ft", sortable: true },
-  { key: "price_per_sqft", label: "$/SqFt", sortable: true },
-  { key: "days_on_mls", label: "Days on MLS", sortable: true },
-  { key: "list_date", label: "Listed", sortable: true },
-  { key: "year_built", label: "Built", sortable: true },
+  { key: "pricePerSqft", label: "$/SqFt", sortable: true },
+  { key: "daysOnMls", label: "Days on MLS", sortable: true },
+  { key: "listDate", label: "Listed", sortable: true },
+  { key: "yearBuilt", label: "Built", sortable: true },
 ];
 
 function formatPrice(n: number | null): string {
@@ -76,7 +76,7 @@ export default function App() {
   const [areaFilter, setAreaFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [sort, setSort] = useState<SortState>({ key: "list_price", dir: "desc" });
+  const [sort, setSort] = useState<SortState>({ key: "listPrice", dir: "desc" });
   const [detail, setDetail] = useState<PropertyRow | null>(null);
   const [areas, setAreas] = useState<{ label: string; norm: string; count: number }[]>([]);
   const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
@@ -90,13 +90,9 @@ export default function App() {
     setTagging(true);
     setTagResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke("classify-listings", {
-        body: { limit: 200 },
-      });
-      if (error) throw error;
-      const r = data as { tagged?: number; skipped?: number; cost_usd?: number };
+      const r = await api.tagNewListings(200);
       setTagResult(
-        `Tagged ${r.tagged ?? 0} new listing${(r.tagged ?? 0) === 1 ? "" : "s"} — refresh to see them.`
+        `Tagged ${r.tagged} new listing${r.tagged === 1 ? "" : "s"} — refresh to see them.`
       );
       // Reload data so new tags show up immediately
       setFlag((f) => f + 1);
@@ -114,37 +110,20 @@ export default function App() {
 
     (async () => {
       try {
-        let query = supabase
-          .from("properties_with_tags")
-          .select("*", { count: "exact" })
-          .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-
-        if (search.trim()) {
-          const term = `%${search.trim()}%`;
-          query = query.or(
-            `street.ilike.${term},city.ilike.${term},zip_code.ilike.${term}`
-          );
-        }
-        if (areaFilter !== "all") {
-          query = query.eq("search_area_norm", areaFilter.toLowerCase());
-        }
-        if (statusFilter !== "all") {
-          query = query.eq("listing_status", statusFilter);
-        }
-        if (typeFilter !== "all") {
-          query = query.eq("property_type", typeFilter);
-        }
-        if (tagFilter !== "all") {
-          query = query.contains("tag_values", [tagFilter]);
-        }
-
-        query = query.order(sort.key, { ascending: sort.dir === "asc" });
-
-        const { data, error: err, count } = await query;
+        const data = await api.listings({
+          page,
+          pageSize: PAGE_SIZE,
+          search,
+          area: areaFilter,
+          status: statusFilter,
+          type: typeFilter,
+          tag: tagFilter,
+          sortKey: sort.key,
+          sortDir: sort.dir,
+        });
         if (cancelled) return;
-        if (err) throw err;
-        setRows(data ?? []);
-        setTotal(count ?? 0);
+        setRows(data.rows as PropertyRow[]);
+        setTotal(data.total);
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load properties");
@@ -159,36 +138,16 @@ export default function App() {
     };
   }, [page, search, areaFilter, statusFilter, typeFilter, tagFilter, sort, refreshFlag]);
 
-  // Load facet options from taxonomy tables (scales to any number of areas)
+  // Load facet options (scales to any number of areas)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [areasRes, typesRes, tagsRes] = await Promise.all([
-          supabase
-            .from("dim_areas")
-            .select("search_area_norm, display_label, listing_count")
-            .order("listing_count", { ascending: false })
-            .limit(200),
-          supabase.from("dim_property_types").select("value, label").order("sort_order"),
-          supabase
-            .from("tags")
-            .select("value, label, category")
-            .eq("is_active", true)
-            .order("category, label"),
-        ]);
+        const facets = await api.facets();
         if (cancelled) return;
-        if (areasRes.data) {
-          setAreas(
-            areasRes.data.map((a) => ({
-              label: a.display_label,
-              norm: a.search_area_norm,
-              count: a.listing_count,
-            }))
-          );
-        }
-        if (typesRes.data) setTypes(typesRes.data);
-        if (tagsRes.data) setTagOptions(tagsRes.data);
+        setAreas(facets.areas);
+        setTypes(facets.types);
+        setTagOptions(facets.tags);
       } catch {
         // facet load failure is non-fatal; filters fall back to "all"
       }
@@ -374,57 +333,57 @@ export default function App() {
                 </tr>
               ) : (
                 rows.map((r) => {
-                  const badge = statusBadge(r.status);
+                  const badge = statusBadge(r.status ?? null);
                   return (
                     <tr
-                      key={r.id}
+                      key={r.propertyId}
                       onClick={() => setDetail(r)}
                       style={{ cursor: "pointer" }}
                     >
                       <td>
                         <div className="cell-with-photo">
-                          {r.primary_photo && (
+                          {r.primaryPhoto && (
                             <img
                               className="row-thumb"
-                              src={r.primary_photo}
+                              src={r.primaryPhoto}
                               alt=""
                               loading="lazy"
                             />
                           )}
                           <div className="cell-address">
-                            {r.street ?? r.formatted_address ?? "—"}
+                            {r.street ?? r.formattedAddress ?? "—"}
                             {r.unit ? ` ${r.unit}` : ""}
                           </div>
                         </div>
                       </td>
                       <td>
                         <div className="tag-chips">
-                          {(r.tag_labels ?? []).slice(0, 3).map((tl) => (
+                          {(r.tagLabels ?? []).slice(0, 3).map((tl) => (
                             <span key={tl} className="tag-chip">{tl}</span>
                           ))}
-                          {(r.tag_labels ?? []).length > 3 && (
-                            <span className="tag-chip tag-chip-more">+{(r.tag_labels ?? []).length - 3}</span>
+                          {(r.tagLabels ?? []).length > 3 && (
+                            <span className="tag-chip tag-chip-more">+{(r.tagLabels ?? []).length - 3}</span>
                           )}
-                          {(r.tag_labels ?? []).length === 0 && <span className="cell-dim">—</span>}
+                          {(r.tagLabels ?? []).length === 0 && <span className="cell-dim">—</span>}
                         </div>
                       </td>
                       {COLUMNS.map((col) => {
-                        if (col.key === "list_price")
+                        if (col.key === "listPrice")
                           return (
                             <td key={col.key} className="cell-price">
-                              {formatPrice(r.list_price)}
+                              {formatPrice(r.listPrice ?? null)}
                             </td>
                           );
-                        if (col.key === "price_per_sqft")
+                        if (col.key === "pricePerSqft")
                           return (
                             <td key={col.key} className="cell-num">
-                              {r.price_per_sqft != null ? `${formatNum(r.price_per_sqft)}` : "—"}
+                              {r.pricePerSqft != null ? `${formatNum(r.pricePerSqft)}` : "—"}
                             </td>
                           );
-                        if (col.key === "list_date")
+                        if (col.key === "listDate")
                           return (
                             <td key={col.key} className="cell-num">
-                              {formatDate(r.list_date)}
+                              {formatDate(r.listDate ?? null)}
                             </td>
                           );
                         if (col.key === "city")
@@ -439,15 +398,15 @@ export default function App() {
                               {r.state ?? "—"}
                             </td>
                           );
-                        if (col.key === "zip_code")
+                        if (col.key === "zipCode")
                           return (
                             <td key={col.key} className="cell-dim">
-                              {r.zip_code ?? "—"}
+                              {r.zipCode ?? "—"}
                             </td>
                           );
                         return (
                           <td key={col.key} className="cell-num">
-                            {formatNum(r[col.key] as number | null)}
+                            {formatNum((r[col.key as keyof PropertyRow] as number | undefined) ?? null)}
                           </td>
                         );
                       })}
@@ -496,30 +455,31 @@ export default function App() {
 }
 
 function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void }) {
-  const badge = statusBadge(row.status);
+  const badge = statusBadge(row.status ?? null);
   const items: { label: string; value: string }[] = [
     { label: "Status", value: badge.label },
-    { label: "Property type", value: (row.style ?? "").replace(/_/g, " ").toLowerCase() || "—" },    { label: "Beds", value: row.beds != null ? String(row.beds) : "—" },
+    { label: "Property type", value: (row.style ?? "").replace(/_/g, " ").toLowerCase() || "—" },
+    { label: "Beds", value: row.beds != null ? String(row.beds) : "—" },
     {
       label: "Baths",
       value:
-        row.full_baths != null || row.half_baths != null
-          ? `${row.full_baths ?? 0} full / ${row.half_baths ?? 0} half`
+        row.fullBaths != null || row.halfBaths != null
+          ? `${row.fullBaths ?? 0} full / ${row.halfBaths ?? 0} half`
           : "—",
     },
     { label: "Interior", value: row.sqft != null ? `${formatNum(row.sqft)} sq ft` : "—" },
-    { label: "Lot", value: row.lot_sqft != null ? `${formatNum(row.lot_sqft)} sq ft` : "—" },
-    { label: "Year built", value: row.year_built != null ? String(row.year_built) : "—" },
-    { label: "Price / sqft", value: row.price_per_sqft != null ? `$${formatNum(row.price_per_sqft)}` : "—" },
-    { label: "HOA fee", value: row.hoa_fee != null ? `${formatPrice(row.hoa_fee)}/mo` : "—" },
-    { label: "Estimated value", value: formatPrice(row.estimated_value) },
-    { label: "Last sold", value: row.last_sold_price != null ? formatPrice(row.last_sold_price) : "—" },
-    { label: "Days on MLS", value: row.days_on_mls != null ? String(row.days_on_mls) : "—" },
-    { label: "Listed on", value: formatDate(row.list_date) },
-    { label: "Last updated", value: formatDate(row.last_update_date) },
+    { label: "Lot", value: row.lotSqft != null ? `${formatNum(row.lotSqft)} sq ft` : "—" },
+    { label: "Year built", value: row.yearBuilt != null ? String(row.yearBuilt) : "—" },
+    { label: "Price / sqft", value: row.pricePerSqft != null ? `${formatNum(row.pricePerSqft)}` : "—" },
+    { label: "HOA fee", value: row.hoaFee != null ? `${formatPrice(row.hoaFee)}/mo` : "—" },
+    { label: "Estimated value", value: formatPrice(row.estimatedValue ?? null) },
+    { label: "Last sold", value: row.lastSoldPrice != null ? formatPrice(row.lastSoldPrice) : "—" },
+    { label: "Days on MLS", value: row.daysOnMls != null ? String(row.daysOnMls) : "—" },
+    { label: "Listed on", value: formatDate(row.listDate ?? null) },
+    { label: "Last updated", value: formatDate(row.lastUpdateDate ?? null) },
     { label: "Source", value: row.source ?? (row.mls ? `MLS ${row.mls}` : "Realtor.com") },
-    { label: "Search area", value: row.search_area ?? "—" },
-    { label: "Data quality", value: `${row.data_quality_score ?? "—"} / 100` },
+    { label: "Search area", value: row.searchArea ?? "—" },
+    { label: "Data quality", value: `${row.dataQualityScore ?? "—"} / 100` },
   ];
 
   return (
@@ -534,7 +494,7 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
             </h2>
             <div className="sub">
               {[row.city, row.state].filter(Boolean).join(", ")}
-              {row.zip_code ? ` ${row.zip_code}` : ""}
+              {row.zipCode ? ` ${row.zipCode}` : ""}
             </div>
           </div>
           <button className="close-btn" onClick={onClose} aria-label="Close">
@@ -542,23 +502,23 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
           </button>
         </div>
         <div className="drawer-body">
-          {row.primary_photo && (
+          {row.primaryPhoto && (
             <img
               className="drawer-photo"
-              src={row.primary_photo}
+              src={row.primaryPhoto}
               alt={row.street ?? "Property photo"}
             />
           )}
           <div style={{ marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
             <span className="cell-price" style={{ fontSize: 22 }}>
-              {formatPrice(row.list_price)}
+              {formatPrice(row.listPrice ?? null)}
             </span>
             <span className={`badge ${badge.cls}`}>{badge.label}</span>
           </div>
 
-          {(row.tag_labels ?? []).length > 0 && (
+          {(row.tagLabels ?? []).length > 0 && (
             <div className="tag-chips" style={{ marginBottom: 16 }}>
-              {(row.tag_labels ?? []).map((tl) => (
+              {(row.tagLabels ?? []).map((tl) => (
                 <span key={tl} className="tag-chip">{tl}</span>
               ))}
             </div>
@@ -573,29 +533,29 @@ function DetailDrawer({ row, onClose }: { row: PropertyRow; onClose: () => void 
             ))}
           </div>
 
-          {row.agent_name && (
+          {row.agentName && (
             <div className="drawer-section">
               <h4>Listing agent</h4>
               <div className="agent-line">
-                <strong>{row.agent_name}</strong>
-                {row.broker_name && <span>{row.broker_name}</span>}
-                {row.office_name && <span>{row.office_name}</span>}
+                <strong>{row.agentName}</strong>
+                {row.brokerName && <span>{row.brokerName}</span>}
+                {row.officeName && <span>{row.officeName}</span>}
               </div>
             </div>
           )}
 
-          {row.description_text && (
+          {row.descriptionText && (
             <div className="drawer-section">
               <h4>Description</h4>
-              <p className="description">{row.description_text}</p>
+              <p className="description">{row.descriptionText}</p>
             </div>
           )}
 
-          {row.property_url && (
+          {row.propertyUrl && (
             <div className="drawer-section">
               <a
                 className="link-btn"
-                href={row.property_url}
+                href={row.propertyUrl}
                 target="_blank"
                 rel="noreferrer"
               >
