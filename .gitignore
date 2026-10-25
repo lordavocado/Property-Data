@@ -6,3 +6,5 @@
 /.ipynb_checkpoints/
 *.csv
 .env
+node_modules/
+.amp/portals/*

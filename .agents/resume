@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Fast health check when an orb wakes; installs nothing.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+export PATH="$HOME/.local/bin:$PATH"
+
+fail() { echo "resume: $* (run .agents/setup)" >&2; exit 1; }
+
+[[ "$(node --version 2>/dev/null)" == v24.* ]] || fail "Node.js 24 not found on PATH"
+[[ -x node_modules/.bin/vite && -x node_modules/.bin/tsc ]] || fail "npm dependencies missing"
+command -v poetry >/dev/null || fail "poetry not found"
+venv="$(poetry env info --path 2>/dev/null)" || fail "Poetry virtualenv missing"
+"$venv/bin/python" -c "import homeharvest, pandas, pytest" 2>/dev/null || fail "Python dependencies missing"
+
+echo "resume: node $(node --version), poetry env $venv OK"
