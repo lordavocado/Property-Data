@@ -7,7 +7,7 @@ homepage = "https://github.com/ZacharyHampton/HomeHarvest"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9"
+python = ">=3.10"
 requests = "^2.32.4"
 pandas = "^2.3.1"
 pydantic = "^2.11.7"
@@ -15,7 +15,7 @@ tenacity = "^9.1.2"
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.2"
+pytest = "^9.0.3"
 pre-commit = "^3.7.0"
 
 [build-system]
