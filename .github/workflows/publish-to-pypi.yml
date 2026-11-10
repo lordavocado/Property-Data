@@ -1,5 +1,14 @@
 name: Publish Python 🐍 distributions 📦 to PyPI
-on: push
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-n-publish:
