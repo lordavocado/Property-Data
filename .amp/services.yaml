@@ -1,0 +1,11 @@
+# Amp orb services for Property Data.
+# Amp supplies $PORT; the Vite dev server must listen on it and on every interface.
+services:
+  web:
+    command: npm run dev -- --host 0.0.0.0 --port "$PORT"
+    # The app exposes no health route; the landing page is the readiness check.
+    health: /
+    review: true
+    portal:
+      title: Property Data
+      description: Vite dashboard. Public pages need no sign-in.
