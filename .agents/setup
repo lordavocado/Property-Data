@@ -56,7 +56,7 @@ poetry sync --no-interaction
 # The API (server/db.ts) defaults to mongodb://127.0.0.1:27017/homeharvest. Run a local,
 # empty mongod under systemd so it survives setup and starts in orbs restored from the snapshot.
 MONGO_SERIES=8.0
-if ! command -v mongod >/dev/null; then
+if ! command -v mongod >/dev/null || ! command -v mongosh >/dev/null; then
   step "Installing MongoDB $MONGO_SERIES"
   keyring=/usr/share/keyrings/mongodb-server-$MONGO_SERIES.gpg
   curl -fsSL "https://www.mongodb.org/static/pgp/server-$MONGO_SERIES.asc" | sudo gpg --batch --yes --dearmor -o "$keyring"

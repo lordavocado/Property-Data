@@ -23,7 +23,7 @@ curl -X POST localhost:3001/api/ingest/properties -H 'content-type: application/
   -d '{"records":[{"property_id":"test-1","status":"FOR_SALE","list_price":425000,"street":"1 Test Way","city":"Surprise","state":"AZ"}]}'
 ```
 
-`npm run scrape` loads real data from Realtor.com. `npm run seed:from-supabase` and `POST /api/tag-new-listings` need credentials that are not set up in orbs.
+`poetry run npm run scrape` loads real data from Realtor.com. Run the Python scripts through `poetry run`, because the system `python3` does not have the dependencies. `npm run seed:from-supabase` and `POST /api/tag-new-listings` need credentials that are not set up in orbs.
 
 ## Checks
 
