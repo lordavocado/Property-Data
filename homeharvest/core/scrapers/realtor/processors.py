@@ -4,16 +4,7 @@ Processors for realtor.com property data processing
 
 from datetime import datetime
 from typing import Optional
-from ..models import (
-    Property,
-    ListingType,
-    Agent,
-    Broker,
-    Builder,
-    Advertisers,
-    Office,
-    ReturnType
-)
+from ..models import Property, ListingType, Agent, Broker, Builder, Advertisers, Office, ReturnType
 from .parsers import (
     parse_open_houses,
     parse_units,
@@ -24,7 +15,7 @@ from .parsers import (
     parse_address,
     parse_description,
     calculate_days_on_mls,
-    process_alt_photos
+    process_alt_photos,
 )
 
 
@@ -76,9 +67,15 @@ def process_advertisers(advertisers: list[dict] | None) -> Advertisers | None:
     return processed_advertisers
 
 
-def process_property(result: dict, mls_only: bool = False, extra_property_data: bool = False, 
-                    exclude_pending: bool = False, listing_type: ListingType = ListingType.FOR_SALE,
-                    get_key_func=None, process_extra_property_details_func=None) -> Property | None:
+def process_property(
+    result: dict,
+    mls_only: bool = False,
+    extra_property_data: bool = False,
+    exclude_pending: bool = False,
+    listing_type: ListingType = ListingType.FOR_SALE,
+    get_key_func=None,
+    process_extra_property_details_func=None,
+) -> Property | None:
     """Process property data from GraphQL response"""
     mls = result["source"].get("id") if "source" in result and isinstance(result["source"], dict) else None
 
@@ -99,7 +96,11 @@ def process_property(result: dict, mls_only: bool = False, extra_property_data: 
         return None
 
     property_id = result["property_id"]
-    prop_details = process_extra_property_details_func(result) if extra_property_data and process_extra_property_details_func else {}
+    prop_details = (
+        process_extra_property_details_func(result)
+        if extra_property_data and process_extra_property_details_func
+        else {}
+    )
 
     property_estimates_root = result.get("current_estimates") or result.get("estimates", {}).get("currentValues")
     estimated_value = get_key_func(property_estimates_root, [0, "estimate"]) if get_key_func else None
@@ -109,9 +110,7 @@ def process_property(result: dict, mls_only: bool = False, extra_property_data: 
     realty_property = Property(
         mls=mls,
         mls_id=(
-            result["source"].get("listing_id")
-            if "source" in result and isinstance(result["source"], dict)
-            else None
+            result["source"].get("listing_id") if "source" in result and isinstance(result["source"], dict) else None
         ),
         property_url=result["href"],
         property_id=property_id,
@@ -121,12 +120,50 @@ def process_property(result: dict, mls_only: bool = False, extra_property_data: 
         list_price=result["list_price"],
         list_price_min=result["list_price_min"],
         list_price_max=result["list_price_max"],
-        list_date=(datetime.fromisoformat(result["list_date"].replace('Z', '+00:00') if result["list_date"].endswith('Z') else result["list_date"]) if result.get("list_date") else None),
+        list_date=(
+            datetime.fromisoformat(
+                result["list_date"].replace("Z", "+00:00") if result["list_date"].endswith("Z") else result["list_date"]
+            )
+            if result.get("list_date")
+            else None
+        ),
         prc_sqft=result.get("price_per_sqft"),
-        last_sold_date=(datetime.fromisoformat(result["last_sold_date"].replace('Z', '+00:00') if result["last_sold_date"].endswith('Z') else result["last_sold_date"]) if result.get("last_sold_date") else None),
-        pending_date=(datetime.fromisoformat(result["pending_date"].replace('Z', '+00:00') if result["pending_date"].endswith('Z') else result["pending_date"]) if result.get("pending_date") else None),
-        last_status_change_date=(datetime.fromisoformat(result["last_status_change_date"].replace('Z', '+00:00') if result["last_status_change_date"].endswith('Z') else result["last_status_change_date"]) if result.get("last_status_change_date") else None),
-        last_update_date=(datetime.fromisoformat(result["last_update_date"].replace('Z', '+00:00') if result["last_update_date"].endswith('Z') else result["last_update_date"]) if result.get("last_update_date") else None),
+        last_sold_date=(
+            datetime.fromisoformat(
+                result["last_sold_date"].replace("Z", "+00:00")
+                if result["last_sold_date"].endswith("Z")
+                else result["last_sold_date"]
+            )
+            if result.get("last_sold_date")
+            else None
+        ),
+        pending_date=(
+            datetime.fromisoformat(
+                result["pending_date"].replace("Z", "+00:00")
+                if result["pending_date"].endswith("Z")
+                else result["pending_date"]
+            )
+            if result.get("pending_date")
+            else None
+        ),
+        last_status_change_date=(
+            datetime.fromisoformat(
+                result["last_status_change_date"].replace("Z", "+00:00")
+                if result["last_status_change_date"].endswith("Z")
+                else result["last_status_change_date"]
+            )
+            if result.get("last_status_change_date")
+            else None
+        ),
+        last_update_date=(
+            datetime.fromisoformat(
+                result["last_update_date"].replace("Z", "+00:00")
+                if result["last_update_date"].endswith("Z")
+                else result["last_update_date"]
+            )
+            if result.get("last_update_date")
+            else None
+        ),
         new_construction=result["flags"].get("is_new_construction") is True,
         hoa_fee=(result["hoa"]["fee"] if result.get("hoa") and isinstance(result["hoa"], dict) else None),
         latitude=(result["location"]["address"]["coordinate"].get("lat") if able_to_get_lat_long else None),
@@ -143,7 +180,6 @@ def process_property(result: dict, mls_only: bool = False, extra_property_data: 
         advertisers=advertisers,
         tax=prop_details.get("tax"),
         tax_history=prop_details.get("tax_history"),
-        
         # Additional fields from GraphQL
         mls_status=result.get("mls_status"),
         last_sold_price=result.get("last_sold_price"),

@@ -80,22 +80,22 @@ class Address(BaseModel):
     city: str | None = Field(None, description="The name of the city")
     state: str | None = Field(None, description="The name of the state")
     zip: str | None = Field(None, description="zip code")
-    
+
     # Additional address fields from GraphQL
     street_direction: str | None = None
     street_number: str | None = None
     street_name: str | None = None
     street_suffix: str | None = None
-    
+
     @computed_field
     @property
     def formatted_address(self) -> str | None:
         """Computed property that combines full_line, city, state, and zip into a formatted address."""
         parts = []
-        
+
         if self.full_line:
             parts.append(self.full_line)
-        
+
         city_state_zip = []
         if self.city:
             city_state_zip.append(self.city)
@@ -103,13 +103,11 @@ class Address(BaseModel):
             city_state_zip.append(self.state)
         if self.zip:
             city_state_zip.append(self.zip)
-        
+
         if city_state_zip:
             parts.append(", ".join(city_state_zip))
-        
+
         return ", ".join(parts) if parts else None
-
-
 
 
 class Description(BaseModel):
@@ -117,7 +115,9 @@ class Description(BaseModel):
     alt_photos: list[HttpUrl] | None = None
     style: PropertyType | None = None
     beds: int | None = Field(None, description="Total number of bedrooms")
-    baths_full: int | None = Field(None, description="Total number of full bathrooms (4 parts: Sink, Shower, Bathtub and Toilet)")
+    baths_full: int | None = Field(
+        None, description="Total number of full bathrooms (4 parts: Sink, Shower, Bathtub and Toilet)"
+    )
     baths_half: int | None = Field(None, description="Total number of 1/2 bathrooms (2 parts: Usually Sink and Toilet)")
     sqft: int | None = Field(None, description="Square footage of the Home")
     lot_sqft: int | None = Field(None, description="Lot square footage")
@@ -126,7 +126,7 @@ class Description(BaseModel):
     garage: float | None = Field(None, description="Number of garage spaces")
     stories: int | None = Field(None, description="Number of stories in the building")
     text: str | None = None
-    
+
     # Additional description fields
     name: str | None = None
     type: str | None = None
@@ -186,7 +186,10 @@ class Property(BaseModel):
 
     mls: str | None = None
     mls_id: str | None = None
-    status: str | None = Field(None, description="Listing status: for_sale, for_rent, sold, off_market, active (New Home Subdivisions), other (if none of the above conditions were met)")
+    status: str | None = Field(
+        None,
+        description="Listing status: for_sale, for_rent, sold, off_market, active (New Home Subdivisions), other (if none of the above conditions were met)",
+    )
     address: Address | None = None
 
     list_price: int | None = Field(None, description="The current price of the Home")
@@ -200,8 +203,12 @@ class Property(BaseModel):
     last_update_date: datetime | None = Field(None, description="Last time the home was updated")
     prc_sqft: int | None = None
     new_construction: bool | None = Field(None, description="Search for new construction homes")
-    hoa_fee: int | None = Field(None, description="Search for homes where HOA fee is known and falls within specified range")
-    days_on_mls: int | None = Field(None, description="An integer value determined by the MLS to calculate days on market")
+    hoa_fee: int | None = Field(
+        None, description="Search for homes where HOA fee is known and falls within specified range"
+    )
+    days_on_mls: int | None = Field(
+        None, description="An integer value determined by the MLS to calculate days on market"
+    )
     description: Description | None = None
     tags: list[str] | None = None
     details: list[HomeDetails] | None = None
@@ -210,7 +217,9 @@ class Property(BaseModel):
     longitude: float | None = None
     neighborhoods: Optional[str] = None
     county: Optional[str] = Field(None, description="County associated with home")
-    fips_code: Optional[str] = Field(None, description="The FIPS (Federal Information Processing Standard) code for the county")
+    fips_code: Optional[str] = Field(
+        None, description="The FIPS (Federal Information Processing Standard) code for the county"
+    )
     nearby_schools: list[str] | None = None
     assessed_value: int | None = None
     estimated_value: int | None = None
@@ -218,18 +227,24 @@ class Property(BaseModel):
     tax_history: list[TaxHistory] | None = None
 
     advertisers: Advertisers | None = None
-    
+
     # Additional fields from GraphQL that aren't currently parsed
     mls_status: str | None = None
     last_sold_price: int | None = None
-    
+
     # Structured data from GraphQL
     open_houses: list[OpenHouse] | None = None
     pet_policy: PetPolicy | None = None
     units: list[Unit] | None = None
-    monthly_fees: HomeMonthlyFee | None = Field(None, description="Monthly fees. Currently only some rental data will have them.")
-    one_time_fees: list[HomeOneTimeFee] | None = Field(None, description="One time fees. Currently only some rental data will have them.")
-    parking: HomeParkingDetails | None = Field(None, description="Parking information. Currently only some rental data will have it.")
+    monthly_fees: HomeMonthlyFee | None = Field(
+        None, description="Monthly fees. Currently only some rental data will have them."
+    )
+    one_time_fees: list[HomeOneTimeFee] | None = Field(
+        None, description="One time fees. Currently only some rental data will have them."
+    )
+    parking: HomeParkingDetails | None = Field(
+        None, description="Parking information. Currently only some rental data will have it."
+    )
     terms: list[PropertyDetails] | None = None
     popularity: Popularity | None = None
     tax_record: TaxRecord | None = None
@@ -241,6 +256,7 @@ class Property(BaseModel):
 
 
 # Specialized models for GraphQL types
+
 
 class HomeMonthlyFee(BaseModel):
     description: str | None = None
@@ -255,7 +271,9 @@ class HomeOneTimeFee(BaseModel):
 class HomeParkingDetails(BaseModel):
     unassigned_space_rent: int | None = None
     assigned_spaces_available: int | None = None
-    description: str | None = Field(None, description="Parking information. Currently only some rental data will have it.")
+    description: str | None = Field(
+        None, description="Parking information. Currently only some rental data will have it."
+    )
     assigned_space_rent: int | None = None
 
 
@@ -309,9 +327,14 @@ class Assessment(BaseModel):
 
 class TaxHistory(BaseModel):
     assessment: Assessment | None = None
-    market: Assessment | None = Field(None, description="Market values as provided by the county or local taxing/assessment authority")
+    market: Assessment | None = Field(
+        None, description="Market values as provided by the county or local taxing/assessment authority"
+    )
     appraisal: Assessment | None = Field(None, description="Appraised value given by taxing authority")
-    value: Assessment | None = Field(None, description="Value closest to current market value used for assessment by county or local taxing authorities")
+    value: Assessment | None = Field(
+        None,
+        description="Value closest to current market value used for assessment by county or local taxing authorities",
+    )
     tax: int | None = None
     year: int | None = None
     assessed_year: int | None = Field(None, description="Assessment year for which taxes were billed")
@@ -326,7 +349,9 @@ class TaxRecord(BaseModel):
 
 
 class EstimateSource(BaseModel):
-    type: str | None = Field(None, description="Type of the avm vendor, list of values: corelogic, collateral, quantarium")
+    type: str | None = Field(
+        None, description="Type of the avm vendor, list of values: corelogic, collateral, quantarium"
+    )
     name: str | None = Field(None, description="Name of the avm vendor")
 
 
@@ -340,7 +365,9 @@ class PropertyEstimate(BaseModel):
 
 
 class HomeEstimates(BaseModel):
-    current_values: list[PropertyEstimate] | None = Field(None, description="Current valuation and best value for home from multiple AVM vendors")
+    current_values: list[PropertyEstimate] | None = Field(
+        None, description="Current valuation and best value for home from multiple AVM vendors"
+    )
 
 
 class PropertyDetails(BaseModel):

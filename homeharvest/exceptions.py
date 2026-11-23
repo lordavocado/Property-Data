@@ -8,6 +8,7 @@ class InvalidDate(Exception):
 
 class AuthenticationError(Exception):
     """Raised when there is an issue with the authentication process."""
+
     def __init__(self, *args, response):
         super().__init__(*args)
 

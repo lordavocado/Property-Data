@@ -608,7 +608,8 @@ fragment PropertyResult on Home {
 }
 """
 
-HOMES_DATA = """%s
+HOMES_DATA = (
+    """%s
                 nearbySchools: nearby_schools(radius: 5.0, limit_per_level: 3) {
                             __typename schools { district { __typename id name } }
                         }
@@ -660,9 +661,12 @@ HOMES_DATA = """%s
                         isBestHomeValue: isbest_homevalue
                     }
                 }
-}""" % _SEARCH_HOMES_DATA_BASE
+}"""
+    % _SEARCH_HOMES_DATA_BASE
+)
 
-SEARCH_HOMES_DATA = """%s
+SEARCH_HOMES_DATA = (
+    """%s
 current_estimates {
     __typename
     source {
@@ -676,21 +680,29 @@ current_estimates {
     date
     isBestHomeValue: isbest_homevalue
 }
-}""" % _SEARCH_HOMES_DATA_BASE
+}"""
+    % _SEARCH_HOMES_DATA_BASE
+)
 
 # Query body using inline fields (kept for backward compatibility)
-GENERAL_RESULTS_QUERY_BODY = """{
+GENERAL_RESULTS_QUERY_BODY = (
+    """{
                             count
                             total
                             results %s
-                        }""" % SEARCH_HOMES_DATA
+                        }"""
+    % SEARCH_HOMES_DATA
+)
 
-GENERAL_RESULTS_QUERY = """{
+GENERAL_RESULTS_QUERY = (
+    """{
                             __typename
                             count
                             total
                             results %s
-                        }""" % SEARCH_HOMES_DATA
+                        }"""
+    % SEARCH_HOMES_DATA
+)
 
 LISTING_PHOTOS_FRAGMENT = """
 fragment ListingPhotosFragment on SearchHome {

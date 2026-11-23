@@ -71,7 +71,7 @@ ordered_properties = [
     "office_phones",
     "nearby_schools",
     "primary_photo",
-    "alt_photos"
+    "alt_photos",
 ]
 
 
@@ -121,12 +121,16 @@ def process_result(result: Property) -> pd.DataFrame:
     prop_data["price_per_sqft"] = prop_data["prc_sqft"]
     prop_data["nearby_schools"] = filter(None, prop_data["nearby_schools"]) if prop_data["nearby_schools"] else None
     prop_data["nearby_schools"] = ", ".join(set(prop_data["nearby_schools"])) if prop_data["nearby_schools"] else None
-    
+
     # Convert datetime objects to strings for CSV (preserve full datetime including time)
     for date_field in ["list_date", "pending_date", "last_sold_date", "last_status_change_date"]:
         if prop_data.get(date_field):
-            prop_data[date_field] = prop_data[date_field].strftime("%Y-%m-%d %H:%M:%S") if hasattr(prop_data[date_field], 'strftime') else prop_data[date_field]
-    
+            prop_data[date_field] = (
+                prop_data[date_field].strftime("%Y-%m-%d %H:%M:%S")
+                if hasattr(prop_data[date_field], "strftime")
+                else prop_data[date_field]
+            )
+
     # Convert HttpUrl objects to strings for CSV
     if prop_data.get("property_url"):
         prop_data["property_url"] = str(prop_data["property_url"])
@@ -134,7 +138,9 @@ def process_result(result: Property) -> pd.DataFrame:
     description = result.description
     if description:
         prop_data["primary_photo"] = str(description.primary_photo) if description.primary_photo else None
-        prop_data["alt_photos"] = ", ".join(str(url) for url in description.alt_photos) if description.alt_photos else None
+        prop_data["alt_photos"] = (
+            ", ".join(str(url) for url in description.alt_photos) if description.alt_photos else None
+        )
         prop_data["style"] = (
             description.style
             if isinstance(description.style, str)
@@ -176,13 +182,13 @@ def validate_dates(date_from: str | None, date_to: str | None) -> None:
         # Validate and parse date_from if provided
         date_from_obj = None
         if date_from:
-            date_from_str = date_from.replace('Z', '+00:00') if date_from.endswith('Z') else date_from
+            date_from_str = date_from.replace("Z", "+00:00") if date_from.endswith("Z") else date_from
             date_from_obj = datetime.fromisoformat(date_from_str)
 
         # Validate and parse date_to if provided
         date_to_obj = None
         if date_to:
-            date_to_str = date_to.replace('Z', '+00:00') if date_to.endswith('Z') else date_to
+            date_to_str = date_to.replace("Z", "+00:00") if date_to.endswith("Z") else date_to
             date_to_obj = datetime.fromisoformat(date_to_str)
 
         # If both provided, ensure date_to is after date_from
@@ -231,7 +237,7 @@ def validate_offset(offset: int, limit: int = 10000) -> None:
         warnings.warn(
             f"Offset should be a multiple of 200 (page size) for optimal performance. "
             f"Using offset {offset} may result in less efficient pagination.",
-            UserWarning
+            UserWarning,
         )
 
 
@@ -242,6 +248,7 @@ def validate_datetime(datetime_value) -> None:
 
     # Already a datetime object - valid
     from datetime import datetime as dt, date
+
     if isinstance(datetime_value, (dt, date)):
         return
 
@@ -254,7 +261,7 @@ def validate_datetime(datetime_value) -> None:
 
     try:
         # Try parsing as ISO 8601 datetime
-        datetime.fromisoformat(datetime_value.replace('Z', '+00:00'))
+        datetime.fromisoformat(datetime_value.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         raise InvalidDate(
             f"Invalid datetime format: '{datetime_value}'. "
@@ -277,9 +284,7 @@ def validate_last_update_filters(updated_since: str | None, updated_in_past_hour
     # Validate updated_in_past_hours range if provided
     if updated_in_past_hours is not None:
         if updated_in_past_hours < 1:
-            raise ValueError(
-                f"updated_in_past_hours must be at least 1. Got: {updated_in_past_hours}"
-            )
+            raise ValueError(f"updated_in_past_hours must be at least 1. Got: {updated_in_past_hours}")
 
 
 def validate_filters(
@@ -317,15 +322,11 @@ def validate_sort(sort_by: str | None, sort_direction: str | None = "desc") -> N
     valid_directions = ["asc", "desc"]
 
     if sort_by and sort_by not in valid_sort_fields:
-        raise ValueError(
-            f"Invalid sort_by value: '{sort_by}'. "
-            f"Valid options: {', '.join(valid_sort_fields)}"
-        )
+        raise ValueError(f"Invalid sort_by value: '{sort_by}'. " f"Valid options: {', '.join(valid_sort_fields)}")
 
     if sort_direction and sort_direction not in valid_directions:
         raise ValueError(
-            f"Invalid sort_direction value: '{sort_direction}'. "
-            f"Valid options: {', '.join(valid_directions)}"
+            f"Invalid sort_direction value: '{sort_direction}'. " f"Valid options: {', '.join(valid_directions)}"
         )
 
 
@@ -361,6 +362,7 @@ def convert_to_datetime_string(value) -> str | None:
 
     # datetime.datetime object
     from datetime import datetime, date, timezone
+
     if isinstance(value, datetime):
         # Handle naive datetime - treat as local time and convert to UTC
         if value.tzinfo is None:
@@ -404,13 +406,11 @@ def extract_timedelta_hours(value) -> int | None:
 
     # timedelta object - convert to hours
     from datetime import timedelta
+
     if isinstance(value, timedelta):
         return int(value.total_seconds() / 3600)
 
-    raise ValueError(
-        f"Invalid past_hours value. Expected int or timedelta object. "
-        f"Got: {type(value).__name__}"
-    )
+    raise ValueError(f"Invalid past_hours value. Expected int or timedelta object. " f"Got: {type(value).__name__}")
 
 
 def extract_timedelta_days(value) -> int | None:
@@ -433,13 +433,11 @@ def extract_timedelta_days(value) -> int | None:
 
     # timedelta object - convert to days
     from datetime import timedelta
+
     if isinstance(value, timedelta):
         return int(value.total_seconds() / 86400)  # 86400 seconds in a day
 
-    raise ValueError(
-        f"Invalid past_days value. Expected int or timedelta object. "
-        f"Got: {type(value).__name__}"
-    )
+    raise ValueError(f"Invalid past_days value. Expected int or timedelta object. " f"Got: {type(value).__name__}")
 
 
 def detect_precision_and_convert(value):
@@ -473,7 +471,7 @@ def detect_precision_and_convert(value):
     # String - detect if it has time component
     if isinstance(value, str):
         # ISO 8601 datetime with time component (has 'T' and time)
-        if 'T' in value:
+        if "T" in value:
             return (value, "hour")
         # Date-only string
         else:

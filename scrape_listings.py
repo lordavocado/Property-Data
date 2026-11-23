@@ -31,15 +31,25 @@ def headers():
 
 
 STATUS_MAP = {
-    "FOR_SALE": "FOR_SALE", "PENDING": "PENDING", "CONTINGENT": "CONTINGENT",
-    "SOLD": "SOLD", "OFF_MARKET": "OFF_MARKET", "OTHER": "UNKNOWN",
+    "FOR_SALE": "FOR_SALE",
+    "PENDING": "PENDING",
+    "CONTINGENT": "CONTINGENT",
+    "SOLD": "SOLD",
+    "OFF_MARKET": "OFF_MARKET",
+    "OTHER": "UNKNOWN",
 }
 
 STYLE_MAP = {
-    "SINGLE_FAMILY": "SINGLE_FAMILY", "CONDO": "CONDO", "CONDOS": "CONDO",
-    "CONDO_TOWNHOME_ROWHOME_COOP": "CONDO", "TOWNHOME": "TOWNHOME",
-    "TOWNHOMES": "TOWNHOME", "MULTI_FAMILY": "MULTI_FAMILY", "MOBILE": "MOBILE",
-    "LAND": "LAND", "APARTMENT": "APARTMENT",
+    "SINGLE_FAMILY": "SINGLE_FAMILY",
+    "CONDO": "CONDO",
+    "CONDOS": "CONDO",
+    "CONDO_TOWNHOME_ROWHOME_COOP": "CONDO",
+    "TOWNHOME": "TOWNHOME",
+    "TOWNHOMES": "TOWNHOME",
+    "MULTI_FAMILY": "MULTI_FAMILY",
+    "MOBILE": "MOBILE",
+    "LAND": "LAND",
+    "APARTMENT": "APARTMENT",
 }
 
 
@@ -49,6 +59,7 @@ def dataframe_to_records(df, search_area: str, batch_id: str | None = None) -> l
     now = datetime.now(timezone.utc).isoformat()
 
     for _, row in df.iterrows():
+
         def val(col):
             v = row.get(col)
             if v is None:

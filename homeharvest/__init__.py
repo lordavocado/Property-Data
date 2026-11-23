@@ -3,13 +3,25 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 from .core.scrapers import ScraperInput
 from .utils import (
-    process_result, ordered_properties, validate_input, validate_dates, validate_limit,
-    validate_offset, validate_datetime, validate_filters, validate_sort, validate_last_update_filters,
-    convert_to_datetime_string, extract_timedelta_hours, extract_timedelta_days, detect_precision_and_convert
+    process_result,
+    ordered_properties,
+    validate_input,
+    validate_dates,
+    validate_limit,
+    validate_offset,
+    validate_datetime,
+    validate_filters,
+    validate_sort,
+    validate_last_update_filters,
+    convert_to_datetime_string,
+    extract_timedelta_hours,
+    extract_timedelta_days,
+    detect_precision_and_convert,
 )
 from .core.scrapers.realtor import RealtorScraper
 from .core.scrapers.models import ListingType, SearchPropertyType, ReturnType, Property
 from typing import Union, Optional, List
+
 
 def scrape_property(
     location: str,
@@ -108,15 +120,24 @@ def scrape_property(
     validate_limit(limit)
     validate_offset(offset, limit)
     validate_filters(
-        beds_min, beds_max, baths_min, baths_max, sqft_min, sqft_max,
-        price_min, price_max, lot_sqft_min, lot_sqft_max, year_built_min, year_built_max
+        beds_min,
+        beds_max,
+        baths_min,
+        baths_max,
+        sqft_min,
+        sqft_max,
+        price_min,
+        price_max,
+        lot_sqft_min,
+        lot_sqft_max,
+        year_built_min,
+        year_built_max,
     )
     validate_sort(sort_by, sort_direction)
 
     # Validate new last_update_date filtering parameters
     validate_last_update_filters(
-        convert_to_datetime_string(updated_since),
-        extract_timedelta_hours(updated_in_past_hours)
+        convert_to_datetime_string(updated_since), extract_timedelta_hours(updated_in_past_hours)
     )
 
     # Convert listing_type to appropriate format
@@ -149,9 +170,11 @@ def scrape_property(
     # Auto-apply optimal sort for PENDING listings with date filters
     # PENDING API filtering is broken, so we rely on client-side filtering
     # Sorting by pending_date ensures efficient pagination with early termination
-    elif (converted_listing_type == ListingType.PENDING and
-          (converted_past_days or converted_past_hours or converted_date_from) and
-          not sort_by):
+    elif (
+        converted_listing_type == ListingType.PENDING
+        and (converted_past_days or converted_past_hours or converted_date_from)
+        and not sort_by
+    ):
         sort_by = "pending_date"
         if not sort_direction:
             sort_direction = "desc"  # Most recent first
