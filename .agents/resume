@@ -14,4 +14,6 @@ command -v poetry >/dev/null || fail "poetry not found"
 venv="$(poetry env info --path 2>/dev/null)" || fail "Poetry virtualenv missing"
 "$venv/bin/python" -c "import homeharvest, pandas, pytest" 2>/dev/null || fail "Python dependencies missing"
 
+systemctl is-active --quiet mongod || sudo systemctl start mongod || fail "mongod is not running"
+
 echo "resume: node $(node --version), poetry env $venv OK"

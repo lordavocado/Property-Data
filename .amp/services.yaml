@@ -1,0 +1,11 @@
+services:
+  api:
+    # vite.config.ts proxies /api to http://localhost:3001 by default.
+    command: npm run server
+    port: 3001
+    health: /api/health
+  web:
+    command: npx vite --port "$PORT" --strictPort
+    portal:
+      title: Dashboard
+      description: Vite dev server; /api is proxied to the api service (local MongoDB).
