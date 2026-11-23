@@ -8,7 +8,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 fail() { echo "resume: $* (run .agents/setup)" >&2; exit 1; }
 
-[[ "$(node --version 2>/dev/null)" == v24.* ]] || fail "Node.js 24 not found on PATH"
+node_major="$(tr -d '[:space:]v' < .nvmrc)"
+[[ "$(node --version 2>/dev/null)" == "v$node_major."* ]] || fail "Node.js $node_major (.nvmrc) not found on PATH"
 [[ -x node_modules/.bin/vite && -x node_modules/.bin/tsc ]] || fail "npm dependencies missing"
 command -v poetry >/dev/null || fail "poetry not found"
 venv="$(poetry env info --path 2>/dev/null)" || fail "Poetry virtualenv missing"

@@ -9,8 +9,8 @@ cd "$repo_root"
 step() { echo "==> $* ($(date +%T))"; }
 
 # --- Node.js -----------------------------------------------------------------
-# The repository pins no Node.js version (no .nvmrc/.node-version/engines), so use Node.js 24.
-NODE_MAJOR=24
+# Node.js major version pinned in .nvmrc.
+NODE_MAJOR="$(tr -d '[:space:]v' < .nvmrc)"
 node_root="$HOME/.local/share/node-v$NODE_MAJOR"
 bin_dir="$HOME/.local/bin" # precedes /usr/local/bin on the orb PATH
 mkdir -p "$bin_dir"
