@@ -11,26 +11,26 @@ def parse_open_houses(open_houses_data: list[dict] | None) -> list[dict] | None:
     """Parse open houses data and convert date strings to datetime objects"""
     if not open_houses_data:
         return None
-        
+
     parsed_open_houses = []
     for oh in open_houses_data:
         parsed_oh = oh.copy()
-        
+
         # Parse start_date and end_date
         if parsed_oh.get("start_date"):
             try:
                 parsed_oh["start_date"] = datetime.fromisoformat(parsed_oh["start_date"].replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 parsed_oh["start_date"] = None
-                
+
         if parsed_oh.get("end_date"):
             try:
                 parsed_oh["end_date"] = datetime.fromisoformat(parsed_oh["end_date"].replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 parsed_oh["end_date"] = None
-                
+
         parsed_open_houses.append(parsed_oh)
-        
+
     return parsed_open_houses
 
 
@@ -38,20 +38,22 @@ def parse_units(units_data: list[dict] | None) -> list[dict] | None:
     """Parse units data and convert date strings to datetime objects"""
     if not units_data:
         return None
-        
+
     parsed_units = []
     for unit in units_data:
         parsed_unit = unit.copy()
-        
+
         # Parse availability date
         if parsed_unit.get("availability") and parsed_unit["availability"].get("date"):
             try:
-                parsed_unit["availability"]["date"] = datetime.fromisoformat(parsed_unit["availability"]["date"].replace("Z", "+00:00"))
+                parsed_unit["availability"]["date"] = datetime.fromisoformat(
+                    parsed_unit["availability"]["date"].replace("Z", "+00:00")
+                )
             except (ValueError, AttributeError):
                 parsed_unit["availability"]["date"] = None
-                
+
         parsed_units.append(parsed_unit)
-        
+
     return parsed_units
 
 
@@ -59,16 +61,18 @@ def parse_tax_record(tax_record_data: dict | None) -> dict | None:
     """Parse tax record data and convert date strings to datetime objects"""
     if not tax_record_data:
         return None
-        
+
     parsed_tax_record = tax_record_data.copy()
-    
+
     # Parse last_update_date
     if parsed_tax_record.get("last_update_date"):
         try:
-            parsed_tax_record["last_update_date"] = datetime.fromisoformat(parsed_tax_record["last_update_date"].replace("Z", "+00:00"))
+            parsed_tax_record["last_update_date"] = datetime.fromisoformat(
+                parsed_tax_record["last_update_date"].replace("Z", "+00:00")
+            )
         except (ValueError, AttributeError):
             parsed_tax_record["last_update_date"] = None
-            
+
     return parsed_tax_record
 
 
@@ -76,28 +80,25 @@ def parse_current_estimates(estimates_data: list[dict] | None) -> list[dict] | N
     """Parse current estimates data and convert date strings to datetime objects"""
     if not estimates_data:
         return None
-        
+
     parsed_estimates = []
     for estimate in estimates_data:
         parsed_estimate = estimate.copy()
-        
+
         # Parse date
         if parsed_estimate.get("date"):
             try:
                 parsed_estimate["date"] = datetime.fromisoformat(parsed_estimate["date"].replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 parsed_estimate["date"] = None
-        
+
         # Parse source information
         if parsed_estimate.get("source"):
             source_data = parsed_estimate["source"]
-            parsed_estimate["source"] = {
-                "type": source_data.get("type"),
-                "name": source_data.get("name")
-            }
-                
+            parsed_estimate["source"] = {"type": source_data.get("type"), "name": source_data.get("name")}
+
         parsed_estimates.append(parsed_estimate)
-        
+
     return parsed_estimates
 
 
@@ -105,31 +106,28 @@ def parse_estimates(estimates_data: dict | None) -> dict | None:
     """Parse estimates data and convert date strings to datetime objects"""
     if not estimates_data:
         return None
-        
+
     parsed_estimates = estimates_data.copy()
-    
+
     # Parse current_values (which is aliased as currentValues in GraphQL)
     current_values = parsed_estimates.get("currentValues") or parsed_estimates.get("current_values")
     if current_values:
         parsed_current_values = []
         for estimate in current_values:
             parsed_estimate = estimate.copy()
-            
+
             # Parse date
             if parsed_estimate.get("date"):
                 try:
                     parsed_estimate["date"] = datetime.fromisoformat(parsed_estimate["date"].replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
                     parsed_estimate["date"] = None
-            
+
             # Parse source information
             if parsed_estimate.get("source"):
                 source_data = parsed_estimate["source"]
-                parsed_estimate["source"] = {
-                    "type": source_data.get("type"),
-                    "name": source_data.get("name")
-                }
-            
+                parsed_estimate["source"] = {"type": source_data.get("type"), "name": source_data.get("name")}
+
             # Convert GraphQL aliases to Pydantic field names
             if "estimateHigh" in parsed_estimate:
                 parsed_estimate["estimate_high"] = parsed_estimate.pop("estimateHigh")
@@ -137,15 +135,15 @@ def parse_estimates(estimates_data: dict | None) -> dict | None:
                 parsed_estimate["estimate_low"] = parsed_estimate.pop("estimateLow")
             if "isBestHomeValue" in parsed_estimate:
                 parsed_estimate["is_best_home_value"] = parsed_estimate.pop("isBestHomeValue")
-                    
+
             parsed_current_values.append(parsed_estimate)
-        
+
         parsed_estimates["current_values"] = parsed_current_values
-        
+
         # Remove the GraphQL alias if it exists
         if "currentValues" in parsed_estimates:
             del parsed_estimates["currentValues"]
-    
+
     return parsed_estimates
 
 
@@ -193,7 +191,6 @@ def parse_address(result: dict, search_type: str) -> Address:
         city=address["city"],
         state=address["state_code"],
         zip=address["postal_code"],
-        
         # Additional address fields
         street_direction=address.get("street_direction"),
         street_number=address.get("street_number"),
@@ -217,9 +214,7 @@ def parse_description(result: dict) -> Description | None:
         style = style.upper()
 
     primary_photo = None
-    if (primary_photo_info := result.get("primary_photo")) and (
-        primary_photo_href := primary_photo_info.get("href")
-    ):
+    if (primary_photo_info := result.get("primary_photo")) and (primary_photo_href := primary_photo_info.get("href")):
         primary_photo = primary_photo_href.replace("s.jpg", "od-w480_h360_x2.webp?w=1080&q=75")
 
     return Description(
@@ -240,7 +235,6 @@ def parse_description(result: dict) -> Description | None:
         garage=description_data.get("garage"),
         stories=description_data.get("stories"),
         text=description_data.get("text"),
-        
         # Additional description fields
         name=description_data.get("name"),
         type=description_data.get("type"),
@@ -254,7 +248,7 @@ def calculate_days_on_mls(result: dict) -> Optional[int]:
     if list_date_str:
         try:
             # Parse full datetime, then use date() for day calculation
-            list_date_str_clean = list_date_str.replace('Z', '+00:00') if list_date_str.endswith('Z') else list_date_str
+            list_date_str_clean = list_date_str.replace("Z", "+00:00") if list_date_str.endswith("Z") else list_date_str
             list_date = datetime.fromisoformat(list_date_str_clean).replace(tzinfo=None)
         except (ValueError, AttributeError):
             # Fallback for date-only format
@@ -264,7 +258,9 @@ def calculate_days_on_mls(result: dict) -> Optional[int]:
     last_sold_date = None
     if last_sold_date_str:
         try:
-            last_sold_date_str_clean = last_sold_date_str.replace('Z', '+00:00') if last_sold_date_str.endswith('Z') else last_sold_date_str
+            last_sold_date_str_clean = (
+                last_sold_date_str.replace("Z", "+00:00") if last_sold_date_str.endswith("Z") else last_sold_date_str
+            )
             last_sold_date = datetime.fromisoformat(last_sold_date_str_clean).replace(tzinfo=None)
         except (ValueError, AttributeError):
             # Fallback for date-only format

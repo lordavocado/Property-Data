@@ -318,7 +318,7 @@ Property
 
 ├── Agent/Broker/Office Info (Pydantic/Raw):
 │ ├── agent_uuid
-│ ├── agent_name  
+│ ├── agent_name
 │ ├── agent_email
 │ ├── agent_phone
 │ ├── agent_state_license
